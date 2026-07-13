@@ -7,6 +7,21 @@ import { generatePath } from './pathGenerator';
 import { buildUrl, type UrlFormat } from './urlBuilder';
 import { readClipboardImage, computeMd5, extensionFromFormat } from './imageUtils';
 
+/** 共享错误日志输出通道 */
+let errorChannel: vscode.OutputChannel | undefined;
+
+function getErrorChannel(): vscode.OutputChannel {
+  if (!errorChannel) {
+    errorChannel = vscode.window.createOutputChannel('Paste Image to S3');
+  }
+  return errorChannel;
+}
+
+function logError(detail: string): void {
+  const channel = getErrorChannel();
+  channel.appendLine(`[${new Date().toISOString()}] ${detail}`);
+}
+
 /** 根据文件类型决定 URL 格式 */
 function resolveUrlFormat(configFormat: 'url' | 'markdown' | 'auto', editor: vscode.TextEditor): UrlFormat {
   if (configFormat !== 'auto') {
@@ -31,7 +46,13 @@ function getContentType(format: string): string {
 
 /** 注册粘贴命令拦截 */
 export function registerPasteCommand(context: vscode.ExtensionContext): vscode.Disposable {
-  return vscode.commands.registerTextEditorCommand(
+
+  // 注册错误日志查看命令
+  const errorLogCmd = vscode.commands.registerCommand('paste-image-to-s3.showErrorLog', () => {
+    getErrorChannel().show();
+  });
+
+  const pasteCmd = vscode.commands.registerTextEditorCommand(
     'editor.action.clipboardPasteAction',
     async (editor) => {
       const config = getConfig();
@@ -109,6 +130,8 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         const message = err?.message || String(err);
         const statusCode = err?.$metadata?.httpStatusCode;
 
+        logError(message);
+
         if (statusCode === 403 || message.includes('AccessDenied') || message.includes('Forbidden')) {
           vscode.window.showErrorMessage('S3 认证失败，请检查 Access Key 配置');
         } else if (statusCode === 404 || message.includes('NotFound') || message.includes('NoSuchBucket')) {
@@ -118,9 +141,7 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         } else {
           const action = await vscode.window.showErrorMessage(`S3 上传失败: ${message}`, '查看详情');
           if (action === '查看详情') {
-            const output = vscode.window.createOutputChannel('Paste Image to S3');
-            output.appendLine(`[错误] ${new Date().toISOString()} ${message}`);
-            output.show();
+            getErrorChannel().show();
           }
         }
 
@@ -135,4 +156,6 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
       }
     }
   );
+
+  return vscode.Disposable.from(pasteCmd, errorLogCmd);
 }
