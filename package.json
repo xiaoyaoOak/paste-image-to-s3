@@ -1,7 +1,7 @@
 {
   "name": "paste-image-to-s3",
-  "displayName": "paste-image-to-s3",
-  "description": "将图片粘贴到S3存储",
+  "displayName": "Paste Image to S3",
+  "description": "将剪贴板图片自动上传到 S3 兼容存储，并返回 URL",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.125.0"
@@ -9,15 +9,77 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "paste-image-to-s3.helloWorld",
-        "title": "Hello World"
+        "command": "paste-image-to-s3.showErrorLog",
+        "title": "Paste Image to S3: 显示错误日志"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Paste Image to S3",
+      "properties": {
+        "pasteImageToS3.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "S3 服务端点 URL，例如 http://192.168.1.100:9000"
+        },
+        "pasteImageToS3.bucket": {
+          "type": "string",
+          "default": "",
+          "description": "S3 存储桶名称"
+        },
+        "pasteImageToS3.accessKeyId": {
+          "type": "string",
+          "default": "",
+          "description": "S3 Access Key ID"
+        },
+        "pasteImageToS3.secretAccessKey": {
+          "type": "string",
+          "default": "",
+          "description": "S3 Secret Access Key"
+        },
+        "pasteImageToS3.region": {
+          "type": "string",
+          "default": "us-east-1",
+          "description": "S3 区域标识（MinIO 可忽略，SDK 必填）"
+        },
+        "pasteImageToS3.urlPrefix": {
+          "type": "string",
+          "default": "",
+          "description": "对外访问 URL 前缀，用于替代内网 endpoint。例如 endpoint 为内网地址时，设置为 https://cdn.example.com"
+        },
+        "pasteImageToS3.pathTemplate": {
+          "type": "string",
+          "default": "{year}/{month}/{md5}.{ext}",
+          "description": "上传路径模板。支持占位符: {bucket}, {year}, {month}, {day}, {md5}, {ext}, {filename}"
+        },
+        "pasteImageToS3.urlFormat": {
+          "type": "string",
+          "enum": [
+            "url",
+            "markdown",
+            "auto"
+          ],
+          "default": "auto",
+          "description": "返回 URL 格式：url = 纯链接，markdown = ![](url)，auto = 根据文件类型自动选择（.md/.mdx 用 markdown）"
+        },
+        "pasteImageToS3.forcePathStyle": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用路径风格寻址（MinIO 必须开启）"
+        },
+        "pasteImageToS3.useSsl": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否使用 HTTPS 连接 S3"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",
@@ -45,11 +107,11 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.1"
   },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0"
+  },
   "overrides": {
     "diff": "^8.0.4",
     "serialize-javascript": "^7.0.6"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.1085.0"
   }
 }
