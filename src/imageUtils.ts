@@ -2,8 +2,6 @@
 import * as crypto from 'crypto';
 import * as os from 'os';
 import { execSync } from 'child_process';
-import { Buffer } from 'buffer';
-
 export interface ClipboardImage {
   buffer: Buffer;
   format: string; // "png" | "jpeg" | "gif" | "webp" | "bmp" | "tiff"
@@ -21,10 +19,14 @@ const FORMAT_TO_EXT: Record<string, string> = {
 
 /** 通过魔数（文件头字节）检测图片格式 */
 function detectFormat(buffer: Buffer): string | null {
+  if (buffer.length < 4) { return null; }
   if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) { return 'png'; }
   if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) { return 'jpeg'; }
   if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) { return 'gif'; }
-  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) { return 'webp'; } // RIFF....WEBP
+  // RIFF 容器：需同时验证 RIFF 头 (bytes 0-3) + WEBP 四字符码 (bytes 8-11)
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+      buffer.length >= 12 &&
+      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) { return 'webp'; }
   if (buffer[0] === 0x42 && buffer[1] === 0x4D) { return 'bmp'; }
   if (buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2A && buffer[3] === 0x00) { return 'tiff'; }
   if (buffer[0] === 0x4D && buffer[1] === 0x4D && buffer[2] === 0x00 && buffer[3] === 0x2A) { return 'tiff'; }
