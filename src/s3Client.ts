@@ -8,21 +8,32 @@ export class S3Uploader {
 
   constructor(config: PasteImageConfig) {
     this.bucket = config.bucket;
+
+    // 根据 useSsl 配置修正 endpoint 协议前缀
+    let endpoint = config.endpoint;
+    if (!config.useSsl) {
+      // 强制使用 HTTP
+      endpoint = endpoint.replace(/^https:\/\//, 'http://');
+      if (!/^https?:\/\//.test(endpoint)) {
+        endpoint = `http://${endpoint}`;
+      }
+    } else {
+      // 强制使用 HTTPS
+      endpoint = endpoint.replace(/^http:\/\//, 'https://');
+      if (!/^https?:\/\//.test(endpoint)) {
+        endpoint = `https://${endpoint}`;
+      }
+    }
+
     this.client = new S3Client({
-      endpoint: config.endpoint,
+      endpoint,
       region: config.region,
       credentials: {
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
       },
       forcePathStyle: config.forcePathStyle,
-      requestHandler: undefined, // 使用默认 HTTP handler
     });
-
-    if (!config.useSsl) {
-      // 通过 endpoint 协议控制；如果 endpoint 已是 http://，SDK 自动处理
-      // 若 forcePathStyle=true + http endpoint，SDK 默认使用 http
-    }
   }
 
   /**
