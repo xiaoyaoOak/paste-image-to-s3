@@ -1,26 +1,20 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+// src/extension.ts
 import * as vscode from 'vscode';
+import { registerPasteCommand } from './pasteCommand';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+  console.log('paste-image-to-s3 已激活');
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "paste-image-to-s3" is now active!');
+  // 注册粘贴命令拦截
+  const pasteDisposable = registerPasteCommand(context);
+  context.subscriptions.push(pasteDisposable);
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('paste-image-to-s3.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from paste-image-to-s3!');
-	});
-
-	context.subscriptions.push(disposable);
+  // 注册错误日志查看命令
+  const errorLogDisposable = vscode.commands.registerCommand('paste-image-to-s3.showErrorLog', () => {
+    const output = vscode.window.createOutputChannel('Paste Image to S3');
+    output.show();
+  });
+  context.subscriptions.push(errorLogDisposable);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
