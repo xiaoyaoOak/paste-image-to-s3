@@ -25,8 +25,10 @@
     "vscode": "^1.102.0"
   },
   "categories": [
+    "Programming Languages",
     "Other"
   ],
+  "icon": "icon.png",
   "activationEvents": [
     "onStartupFinished"
   ],
