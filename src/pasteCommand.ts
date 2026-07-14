@@ -104,38 +104,37 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         return;
       }
 
-      // 步骤 2: 读取图片 — 三种来源依次尝试
+      // 步骤 2: 读取剪贴板 — 文字 → 图片二进制 → CF_HDROP 依次尝试
       let image: { buffer: Buffer; format: string } | undefined;
 
-      // 2a: 截图 / 复制图片二进制（截图软件、浏览器右键复制图片等）
-      const tImg = Date.now();
-      const clipImage = await readClipboardImage();
-      debugLog(`读取剪贴板图片(二进制): ${Date.now() - tImg}ms, ${clipImage ? `${clipImage.format} ${(clipImage.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
+      // 2a: 先读文字（1ms，最快路径）
+      const tText = Date.now();
+      const clipText = await vscode.env.clipboard.readText();
+      debugLog(`读取剪贴板文字: ${Date.now() - tText}ms, ${clipText ? `${clipText.length} 字符` : '无文字'}`);
 
-      if (clipImage) {
-        image = clipImage;
-      } else {
-        // 2b: 剪贴板文字 → 可能是文件路径或纯文本
-        const tText = Date.now();
-        const clipText = await vscode.env.clipboard.readText();
-        debugLog(`读取剪贴板文字: ${Date.now() - tText}ms, ${clipText ? `${clipText.length} 字符` : '无文字'}`);
-
-        if (clipText) {
-          const fileImage = tryReadImageFile(clipText);
-          if (fileImage) {
-            // 单文件路径复制的图片 → 读取文件内容上传
-            image = fileImage;
-            debugLog(`从文件路径读取图片: ${(fileImage.buffer.length / 1024).toFixed(1)}KB`);
-          } else {
-            // 普通文字 → 直接粘贴
-            await editor.edit(editBuilder => {
-              editBuilder.insert(editor.selection.active, clipText);
-            });
-            debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
-            return;
-          }
+      if (clipText) {
+        const fileImage = tryReadImageFile(clipText);
+        if (fileImage) {
+          image = fileImage;
+          debugLog(`从文件路径读取图片: ${(fileImage.buffer.length / 1024).toFixed(1)}KB`);
         } else {
-          // 2c: 无文字也无二进制 → Windows 文件管理器多选复制 (CF_HDROP)
+          // 普通文字 → 直接粘贴
+          await editor.edit(editBuilder => {
+            editBuilder.insert(editor.selection.active, clipText);
+          });
+          debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
+          return;
+        }
+      } else {
+        // 2b: 无文字 → 尝试图片二进制（截图、浏览器复制图片，PowerShell ~250ms）
+        const tImg = Date.now();
+        const clipImage = await readClipboardImage();
+        debugLog(`读取剪贴板图片: ${Date.now() - tImg}ms, ${clipImage ? `${clipImage.format} ${(clipImage.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
+
+        if (clipImage) {
+          image = clipImage;
+        } else {
+          // 2c: 无文字无图片 → Windows 文件管理器 Ctrl+C 复制文件 (CF_HDROP)
           const tDrop = Date.now();
           const filePaths = readClipboardFilePaths();
           debugLog(`读取剪贴板文件列表: ${Date.now() - tDrop}ms, ${filePaths.length} 个文件`);
