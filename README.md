@@ -38,7 +38,7 @@
 | `pasteImageToS3.accessKeyId` | string | `""` | Access Key ID |
 | `pasteImageToS3.secretAccessKey` | string | `""` | Secret Access Key |
 | `pasteImageToS3.region` | string | `"us-east-1"` | 区域标识（MinIO 可忽略） |
-| `pasteImageToS3.urlPrefix` | string | `""` | 对外访问 URL 前缀。如内网 endpoint 为 `http://192.168.1.100:9000`，设置为 `https://cdn.example.com` 后返回公网 URL |
+| `pasteImageToS3.urlPrefix` | string | `""` | 对外访问 URL 前缀。如内网 endpoint 为 `http://192.168.1.100:9000`，设置为 `https://cdn.example.com/bucket` 后返回公网 URL |
 | `pasteImageToS3.pathTemplate` | string | `"{year}/{month}/{md5}.{ext}"` | 上传路径模板 |
 | `pasteImageToS3.urlFormat` | enum | `"auto"` | 输出格式：`url` 纯链接 / `markdown` `![](url)` / `auto` 自动检测 |
 | `pasteImageToS3.forcePathStyle` | boolean | `true` | 路径风格寻址（MinIO 必须开启） |
