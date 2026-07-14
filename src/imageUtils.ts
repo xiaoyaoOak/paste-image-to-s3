@@ -78,3 +78,16 @@ export function computeMd5(buffer: Buffer): string {
 export function extensionFromFormat(format: string): string {
   return FORMAT_TO_EXT[format] || format;
 }
+
+/** 从剪贴板读取文件路径列表（Windows CF_HDROP），其他平台返回空数组 */
+export function readClipboardFilePaths(): string[] {
+  try {
+    if (os.platform() !== 'win32') { return []; }
+    const script = `Add-Type -AssemblyName System.Windows.Forms;$files = [System.Windows.Forms.Clipboard]::GetFileDropList();if ($files) { $files -join "\`n" }`;
+    const output = execSync(`powershell -Command "${script}"`, { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (!output) { return []; }
+    return output.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+  } catch {
+    return [];
+  }
+}

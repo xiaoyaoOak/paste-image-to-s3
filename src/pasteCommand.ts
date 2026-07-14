@@ -6,7 +6,7 @@ import { getConfig, validateConfig } from './config';
 import { S3Uploader } from './s3Client';
 import { generatePath } from './pathGenerator';
 import { buildUrl, type UrlFormat } from './urlBuilder';
-import { readClipboardImage, computeMd5, extensionFromFormat } from './imageUtils';
+import { readClipboardImage, readClipboardFilePaths, computeMd5, extensionFromFormat } from './imageUtils';
 
 /** 共享输出通道 */
 let sharedChannel: vscode.OutputChannel | undefined;
@@ -104,39 +104,58 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         return;
       }
 
-      // 步骤 2: 先检查剪贴板是否有文字（避免启动 PowerShell 浪费 250ms）
-      const tText = Date.now();
-      const clipText = await vscode.env.clipboard.readText();
-      debugLog(`读取剪贴板文字: ${Date.now() - tText}ms`);
-
-      // 尝试从剪贴板文字中提取图片文件路径
+      // 步骤 2: 读取图片 — 三种来源依次尝试
       let image: { buffer: Buffer; format: string } | undefined;
 
-      if (clipText) {
-        const fileImage = tryReadImageFile(clipText);
-        if (fileImage) {
-          // 剪贴板是图片文件路径 → 读取文件内容上传
-          image = fileImage;
-          debugLog(`从文件路径读取图片: ${clipText}, ${(fileImage.buffer.length / 1024).toFixed(1)}KB`);
-        } else {
-          // 普通文字 → 直接粘贴
-          await editor.edit(editBuilder => {
-            editBuilder.insert(editor.selection.active, clipText);
-          });
-          debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
-          return;
-        }
-      } else {
-        // 步骤 3: 剪贴板无文字 → 尝试从剪贴板读取图片二进制（截图）
-        const tClip = Date.now();
-        const clipImage = await readClipboardImage();
-        debugLog(`读取剪贴板图片: ${Date.now() - tClip}ms, ${clipImage ? `${clipImage.format} ${(clipImage.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
+      // 2a: 截图 / 复制图片二进制（截图软件、浏览器右键复制图片等）
+      const tImg = Date.now();
+      const clipImage = await readClipboardImage();
+      debugLog(`读取剪贴板图片(二进制): ${Date.now() - tImg}ms, ${clipImage ? `${clipImage.format} ${(clipImage.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
 
-        if (!clipImage) {
-          debugLog(`剪贴板为空, 总${Date.now() - tStart}ms`);
-          return;
-        }
+      if (clipImage) {
         image = clipImage;
+      } else {
+        // 2b: 剪贴板文字 → 可能是文件路径或纯文本
+        const tText = Date.now();
+        const clipText = await vscode.env.clipboard.readText();
+        debugLog(`读取剪贴板文字: ${Date.now() - tText}ms, ${clipText ? `${clipText.length} 字符` : '无文字'}`);
+
+        if (clipText) {
+          const fileImage = tryReadImageFile(clipText);
+          if (fileImage) {
+            // 单文件路径复制的图片 → 读取文件内容上传
+            image = fileImage;
+            debugLog(`从文件路径读取图片: ${(fileImage.buffer.length / 1024).toFixed(1)}KB`);
+          } else {
+            // 普通文字 → 直接粘贴
+            await editor.edit(editBuilder => {
+              editBuilder.insert(editor.selection.active, clipText);
+            });
+            debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
+            return;
+          }
+        } else {
+          // 2c: 无文字也无二进制 → Windows 文件管理器多选复制 (CF_HDROP)
+          const tDrop = Date.now();
+          const filePaths = readClipboardFilePaths();
+          debugLog(`读取剪贴板文件列表: ${Date.now() - tDrop}ms, ${filePaths.length} 个文件`);
+
+          const firstImage = filePaths.find(p => {
+            const ext = path.extname(p).toLowerCase();
+            return IMAGE_EXTS.has(ext);
+          });
+          if (firstImage && fs.existsSync(firstImage)) {
+            const buf = fs.readFileSync(firstImage);
+            const fmt = path.extname(firstImage).toLowerCase().slice(1);
+            image = { buffer: buf, format: fmt };
+            debugLog(`从文件列表读取图片: ${firstImage}, ${(buf.length / 1024).toFixed(1)}KB`);
+          }
+        }
+      }
+
+      if (!image) {
+        debugLog(`剪贴板为空, 总${Date.now() - tStart}ms`);
+        return;
       }
 
       // 检查图片大小 (50MB 限制)
