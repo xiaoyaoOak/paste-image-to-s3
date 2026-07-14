@@ -2,7 +2,7 @@
   "name": "paste-image-to-s3",
   "displayName": "Paste Image to S3",
   "description": "将剪贴板图片自动上传到 S3 兼容存储，并返回 URL",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "xiaoyaoOak",
   "license": "MIT",
   "repository": {
@@ -36,8 +36,20 @@
   "contributes": {
     "commands": [
       {
+        "command": "paste-image-to-s3.paste",
+        "title": "Paste Image to S3: 粘贴"
+      },
+      {
         "command": "paste-image-to-s3.showErrorLog",
         "title": "Paste Image to S3: 显示错误日志"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "paste-image-to-s3.paste",
+        "key": "ctrl+v",
+        "mac": "cmd+v",
+        "when": "editorTextFocus && !editorReadonly"
       }
     ],
     "configuration": {

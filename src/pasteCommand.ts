@@ -74,7 +74,7 @@ function tryReadImageFile(text: string): { buffer: Buffer; format: string } | nu
   return { buffer, format };
 }
 
-/** 注册粘贴命令拦截 */
+/** 注册粘贴命令（Ctrl+V 快捷键绑定到本命令，仅 editorTextFocus 时触发） */
 export function registerPasteCommand(context: vscode.ExtensionContext): vscode.Disposable {
 
   // 注册错误日志查看命令
@@ -82,9 +82,15 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
     getChannel().show();
   });
 
-  const pasteCmd = vscode.commands.registerTextEditorCommand(
-    'editor.action.clipboardPasteAction',
-    async (editor) => {
+  const pasteCmd = vscode.commands.registerCommand(
+    'paste-image-to-s3.paste',
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        // 无活动编辑器 → 走原生粘贴
+        return vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+      }
+
       const tStart = Date.now();
       debugLog('━━━━━ 粘贴触发 ━━━━━');
 
@@ -118,11 +124,9 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
           image = fileImage;
           debugLog(`从文件路径读取图片: ${(fileImage.buffer.length / 1024).toFixed(1)}KB`);
         } else {
-          // 普通文字 → 直接粘贴
-          await editor.edit(editBuilder => {
-            editBuilder.insert(editor.selection.active, clipText);
-          });
-          debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
+          // 普通文字 → 重新派发内置粘贴（保留自动缩进/格式化/多光标等智能粘贴）
+          await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+          debugLog(`文字粘贴完成(内置): ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
           return;
         }
       } else {
@@ -149,11 +153,9 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
             image = { buffer: buf, format: fmt };
             debugLog(`从文件列表读取图片: ${firstImage}, ${(buf.length / 1024).toFixed(1)}KB`);
           } else if (filePaths.length > 0) {
-            // 非图片文件 → 粘贴路径文字（VS Code 默认行为）
-            await editor.edit(editBuilder => {
-              editBuilder.insert(editor.selection.active, filePaths.join('\n'));
-            });
-            debugLog(`非图片文件粘贴路径: ${filePaths.length} 个文件`);
+            // 非图片文件 → 重新派发内置粘贴（VS Code 会粘贴文件路径文本）
+            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+            debugLog(`非图片文件粘贴(内置): ${filePaths.length} 个文件`);
             return;
           }
         }
