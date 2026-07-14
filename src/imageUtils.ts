@@ -83,7 +83,7 @@ export function extensionFromFormat(format: string): string {
 export function readClipboardFilePaths(): string[] {
   try {
     if (os.platform() !== 'win32') { return []; }
-    const script = `Add-Type -AssemblyName System.Windows.Forms;$files = [System.Windows.Forms.Clipboard]::GetFileDropList();if ($files) { $files -join "\`n" }`;
+    const script = `Add-Type -AssemblyName System.Windows.Forms;$files = [System.Windows.Forms.Clipboard]::GetFileDropList();if ($files) { $files -join [Environment]::NewLine }`;
     const output = execSync(`powershell -Command "${script}"`, { encoding: 'utf-8', timeout: 5000 }).trim();
     if (!output) { return []; }
     return output.split('\n').map(s => s.trim()).filter(s => s.length > 0);
