@@ -7,19 +7,28 @@ import { generatePath } from './pathGenerator';
 import { buildUrl, type UrlFormat } from './urlBuilder';
 import { readClipboardImage, computeMd5, extensionFromFormat } from './imageUtils';
 
-/** 共享错误日志输出通道 */
-let errorChannel: vscode.OutputChannel | undefined;
+/** 共享输出通道 */
+let sharedChannel: vscode.OutputChannel | undefined;
 
-function getErrorChannel(): vscode.OutputChannel {
-  if (!errorChannel) {
-    errorChannel = vscode.window.createOutputChannel('Paste Image to S3');
+function getChannel(): vscode.OutputChannel {
+  if (!sharedChannel) {
+    sharedChannel = vscode.window.createOutputChannel('Paste Image to S3');
   }
-  return errorChannel;
+  return sharedChannel;
 }
 
 function logError(detail: string): void {
-  const channel = getErrorChannel();
-  channel.appendLine(`[${new Date().toISOString()}] ${detail}`);
+  getChannel().appendLine(`[ERROR] ${detail}`);
+}
+
+// ─── 调试日志 ───────────────────────────────────────────
+const DEBUG_ENABLED = true; // 发布时可改为 false
+
+function debugLog(msg: string): void {
+  if (!DEBUG_ENABLED) { return; }
+  const ts = new Date().toISOString();
+  console.log(`[paste-image-to-s3] ${ts} ${msg}`);
+  getChannel().appendLine(`[DEBUG] ${ts} ${msg}`);
 }
 
 /** 根据文件类型决定 URL 格式 */
@@ -49,16 +58,22 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
 
   // 注册错误日志查看命令
   const errorLogCmd = vscode.commands.registerCommand('paste-image-to-s3.showErrorLog', () => {
-    getErrorChannel().show();
+    getChannel().show();
   });
 
   const pasteCmd = vscode.commands.registerTextEditorCommand(
     'editor.action.clipboardPasteAction',
     async (editor) => {
+      const tStart = Date.now();
+      debugLog('━━━━━ 粘贴触发 ━━━━━');
+
       const config = getConfig();
 
-      // 读取剪贴板图片
+      // 步骤 1: 读取剪贴板图片
+      const tClip = Date.now();
       const image = await readClipboardImage();
+      debugLog(`读取剪贴板: ${Date.now() - tClip}ms, ${image ? `${image.format} ${(image.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
+
       if (!image) {
         // 无图片 — 回退到默认粘贴
         return vscode.commands.executeCommand('default:editor.action.clipboardPasteAction');
@@ -86,19 +101,34 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         return;
       }
 
-      // 状态栏：上传中
-      const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-      statusBar.text = '$(cloud-upload) 上传中...';
-      statusBar.show();
-      context.subscriptions.push(statusBar);
+      // ─── 光标处显示加载占位符 ───
+      const cursorPos = editor.selection.active;
+      const placeholderLabel = resolveUrlFormat(config.urlFormat, editor) === 'markdown'
+        ? '![Uploading...]()'
+        : '⏳ Uploading...';
+      const placeholderLen = placeholderLabel.length;
+
+      const inserted = await editor.edit(editBuilder => {
+        editBuilder.insert(cursorPos, placeholderLabel);
+      }, { undoStopBefore: false, undoStopAfter: false });
+
+      if (!inserted) {
+        debugLog('占位符插入失败，终止');
+        return;
+      }
+      const placeholderEnd = cursorPos.translate(0, placeholderLen);
+      debugLog(`光标占位符已插入: "${placeholderLabel}"`);
 
       try {
-        // 计算 MD5 和扩展名
+        // 步骤 2: 计算 MD5
+        const tMd5 = Date.now();
         const md5 = computeMd5(image.buffer);
         const ext = extensionFromFormat(image.format);
         const now = new Date();
+        debugLog(`MD5 计算: ${Date.now() - tMd5}ms, md5=${md5}, ext=${ext}`);
 
-        // 生成路径
+        // 步骤 3: 生成路径
+        const tPath = Date.now();
         const s3Key = generatePath(config.pathTemplate, {
           bucket: config.bucket,
           year: String(now.getUTCFullYear()),
@@ -108,27 +138,39 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
           ext,
           filename: 'image',
         });
+        debugLog(`路径生成: ${Date.now() - tPath}ms, key=${s3Key}`);
 
-        // 上传 S3
+        // 步骤 4: S3 上传
+        const tUpload = Date.now();
+        debugLog(`开始上传 S3...`);
         const uploader = new S3Uploader(config);
         const contentType = getContentType(image.format);
         await uploader.upload(s3Key, image.buffer, contentType);
+        const uploadDuration = Date.now() - tUpload;
+        debugLog(`S3 上传完成: ${uploadDuration}ms (${(image.buffer.length / 1024 / uploadDuration * 1000).toFixed(0)}KB/s)`);
 
-        // 构建 URL
+        // 步骤 5: 构建 URL
+        const tUrl = Date.now();
         const format = resolveUrlFormat(config.urlFormat, editor);
         const url = buildUrl(s3Key, config.urlPrefix, format);
+        debugLog(`URL 构建: ${Date.now() - tUrl}ms, url=${url}`);
 
-        // 插入编辑器
+        // 步骤 6: 替换占位符为最终 URL
         await editor.edit(editBuilder => {
-          editBuilder.insert(editor.selection.active, url);
-        });
+          editBuilder.replace(new vscode.Range(cursorPos, placeholderEnd), url);
+        }, { undoStopBefore: true, undoStopAfter: true });
 
-        statusBar.dispose();
+        const totalDuration = Date.now() - tStart;
+        debugLog(`━━━━━ 完成: ${totalDuration}ms ━━━━━`);
       } catch (err: any) {
-        statusBar.dispose();
+        // 删除占位符
+        await editor.edit(editBuilder => {
+          editBuilder.replace(new vscode.Range(cursorPos, placeholderEnd), '');
+        }, { undoStopBefore: false, undoStopAfter: false });
 
         const message = err?.message || String(err);
         const statusCode = err?.$metadata?.httpStatusCode;
+        debugLog(`上传失败: ${message}`);
 
         logError(message);
 
@@ -141,18 +183,11 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         } else {
           const action = await vscode.window.showErrorMessage(`S3 上传失败: ${message}`, '查看详情');
           if (action === '查看详情') {
-            getErrorChannel().show();
+            getChannel().show();
           }
         }
 
-        // 状态栏：失败
-        const failedBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-        failedBar.text = '$(error) 上传失败';
-        failedBar.tooltip = '点击查看详细错误';
-        failedBar.command = 'paste-image-to-s3.showErrorLog';
-        failedBar.show();
-        setTimeout(() => failedBar.dispose(), 5000);
-        context.subscriptions.push(failedBar);
+        debugLog(`━━━━━ 失败: ${Date.now() - tStart}ms ━━━━━`);
       }
     }
   );
