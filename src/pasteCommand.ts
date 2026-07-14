@@ -148,6 +148,13 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
             const fmt = path.extname(firstImage).toLowerCase().slice(1);
             image = { buffer: buf, format: fmt };
             debugLog(`从文件列表读取图片: ${firstImage}, ${(buf.length / 1024).toFixed(1)}KB`);
+          } else if (filePaths.length > 0) {
+            // 非图片文件 → 粘贴路径文字（VS Code 默认行为）
+            await editor.edit(editBuilder => {
+              editBuilder.insert(editor.selection.active, filePaths.join('\n'));
+            });
+            debugLog(`非图片文件粘贴路径: ${filePaths.length} 个文件`);
+            return;
           }
         }
       }
