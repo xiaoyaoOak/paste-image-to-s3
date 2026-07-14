@@ -1,71 +1,86 @@
-# paste-image-to-s3 README
+# Paste Image to S3
 
-This is the README for your extension "paste-image-to-s3". After writing up a brief description, we recommend including the following sections.
+将剪贴板中的图片自动上传到 S3 兼容存储，并在编辑器光标位置返回访问 URL。
 
-## Features
+## 功能
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **粘贴即上传**：截图后 Ctrl+V，图片自动上传到 S3 并回写 URL
+- **多来源支持**：截图软件截屏、浏览器右键复制图片、文件管理器 Ctrl+C 复制图片文件均可识别
+- **Markdown / 纯 URL 自动切换**：`.md` / `.mdx` 文件中自动输出 `![](url)`，其他文件输出纯 URL
+- **MD5 去重**：基于内容哈希命名，相同图片只存储一份
+- **路径模板**：支持 `{year}/{month}/{md5}.{ext}` 等占位符自定义存储路径
+- **URL 前缀改写**：内网 endpoint + 公网 urlPrefix，灵活适配 CDN 场景
 
-For example if there is an image subfolder under your extension project workspace:
+## 使用方式
 
-\!\[feature X\]\(images/feature-x.png\)
+1. 配置 S3 服务信息（见下方配置说明）
+2. 截图或复制图片到剪贴板
+3. 在编辑器中按 **Ctrl+V**
+4. 光标处短暂显示 ⌛ 沙漏，上传完成后自动替换为 URL
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+支持以下剪贴板来源：
 
-## Requirements
+| 来源 | 方式 | 说明 |
+|------|------|------|
+| 截图软件 | Ctrl+V 粘贴 | 自动识别剪贴板图片二进制 |
+| 浏览器 | 右键 → 复制图片 → Ctrl+V | 同上 |
+| 文件管理器 | 选中图片 Ctrl+C → Ctrl+V | 读取文件内容上传 |
+| 右键地址复制 | 复制图片路径 → Ctrl+V | 识别路径指向图片文件 |
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+## 扩展配置
 
-## Extension Settings
+扩展提供以下配置项（`设置 → 扩展 → Paste Image to S3`）：
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `pasteImageToS3.endpoint` | string | `""` | S3 服务端点，如 `http://192.168.1.100:9000` |
+| `pasteImageToS3.bucket` | string | `""` | 存储桶名称 |
+| `pasteImageToS3.accessKeyId` | string | `""` | Access Key ID |
+| `pasteImageToS3.secretAccessKey` | string | `""` | Secret Access Key |
+| `pasteImageToS3.region` | string | `"us-east-1"` | 区域标识（MinIO 可忽略） |
+| `pasteImageToS3.urlPrefix` | string | `""` | 对外访问 URL 前缀。如内网 endpoint 为 `http://192.168.1.100:9000`，设置为 `https://cdn.example.com` 后返回公网 URL |
+| `pasteImageToS3.pathTemplate` | string | `"{year}/{month}/{md5}.{ext}"` | 上传路径模板 |
+| `pasteImageToS3.urlFormat` | enum | `"auto"` | 输出格式：`url` 纯链接 / `markdown` `![](url)` / `auto` 自动检测 |
+| `pasteImageToS3.forcePathStyle` | boolean | `true` | 路径风格寻址（MinIO 必须开启） |
+| `pasteImageToS3.useSsl` | boolean | `true` | 是否使用 HTTPS 连接 |
 
-For example:
+### 路径模板占位符
 
-This extension contributes the following settings:
+| 占位符 | 示例 | 说明 |
+|--------|------|------|
+| `{bucket}` | `my-bucket` | 配置中的存储桶名称 |
+| `{year}` | `2026` | 当前年份（UTC） |
+| `{month}` | `07` | 当前月份，2 位补零 |
+| `{day}` | `13` | 当前日期，2 位补零 |
+| `{md5}` | `a1b2c3d4...` | 图片内容的 MD5 哈希（32 位） |
+| `{ext}` | `png` | 图片格式对应的扩展名 |
+| `{filename}` | `image` | 原文件名（默认 `image`） |
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## 支持的图片格式
 
-## Known Issues
+PNG、JPEG、GIF、WebP、BMP、TIFF、SVG（仅文件路径方式）
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+## 系统要求
 
-## Release Notes
+- VS Code `^1.102.0` 及以上
+- S3 兼容存储服务（AWS S3 / MinIO / 阿里云 OSS / 腾讯云 COS 等）
 
-Users appreciate release notes as you update your extension.
+## 已知问题
 
-### 1.0.0
+- Windows 剪贴板读取依赖 PowerShell，首次粘贴有约 200-300ms 启动延迟
+- Ctrl+Z 无法撤销已上传的图片（S3 对象仍保留）
 
-Initial release of ...
+## 开发
 
-### 1.0.1
+```bash
+pnpm install        # 安装依赖
+pnpm compile        # 编译（类型检查 + lint + esbuild）
+pnpm watch          # 监听模式
+pnpm test           # 运行测试
+```
 
-Fixed issue #.
+按 **F5** 启动扩展开发窗口进行调试。
 
-### 1.1.0
+## 许可
 
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+MIT

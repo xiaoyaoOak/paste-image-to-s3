@@ -9,6 +9,10 @@ esbuild.js
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/eslint.config.mjs
+**/eslint.config.cjs
 **/*.map
 **/*.ts
 **/.vscode-test.*
+.superpowers/**
+docs/**
+CLAUDE.md
