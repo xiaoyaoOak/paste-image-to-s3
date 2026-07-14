@@ -69,17 +69,7 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
 
       const config = getConfig();
 
-      // 步骤 1: 读取剪贴板图片
-      const tClip = Date.now();
-      const image = await readClipboardImage();
-      debugLog(`读取剪贴板: ${Date.now() - tClip}ms, ${image ? `${image.format} ${(image.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
-
-      if (!image) {
-        // 无图片 — 回退到默认粘贴
-        return vscode.commands.executeCommand('default:editor.action.clipboardPasteAction');
-      }
-
-      // 校验配置
+      // 步骤 1: 先校验配置（剪贴板读取前，避免白跑 PowerShell）
       const validation = validateConfig(config);
       if (!validation.valid) {
         const missingStr = validation.missing.join(', ');
@@ -93,6 +83,16 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         return;
       }
 
+      // 步骤 2: 读取剪贴板图片
+      const tClip = Date.now();
+      const image = await readClipboardImage();
+      debugLog(`读取剪贴板: ${Date.now() - tClip}ms, ${image ? `${image.format} ${(image.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
+
+      if (!image) {
+        // 无图片 — 回退到默认粘贴
+        return vscode.commands.executeCommand('default:editor.action.clipboardPasteAction');
+      }
+
       // 检查图片大小 (50MB 限制)
       const maxSize = 50 * 1024 * 1024;
       if (image.buffer.length > maxSize) {
@@ -101,11 +101,11 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         return;
       }
 
-      // ─── 光标处显示加载占位符 ───
+      // ─── 光标处插入加载占位符 ───
+      // Unicode 沙漏 ⌛ 或 ⏳, 也可用 📤⬆️☁️
       const cursorPos = editor.selection.active;
-      const placeholderLabel = resolveUrlFormat(config.urlFormat, editor) === 'markdown'
-        ? '![Uploading...]()'
-        : '⏳ Uploading...';
+      const isMarkdown = resolveUrlFormat(config.urlFormat, editor) === 'markdown';
+      const placeholderLabel = isMarkdown ? '![⌛]()' : '⌛';
       const placeholderLen = placeholderLabel.length;
 
       const inserted = await editor.edit(editBuilder => {
