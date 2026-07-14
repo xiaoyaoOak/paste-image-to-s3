@@ -2,7 +2,7 @@
   "name": "paste-image-to-s3",
   "displayName": "Paste Image to S3",
   "description": "将剪贴板图片自动上传到 S3 兼容存储，并返回 URL",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "xiaoyaoOak",
   "license": "MIT",
   "repository": {

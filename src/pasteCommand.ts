@@ -221,7 +221,7 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         // 步骤 5: 构建 URL
         const tUrl = Date.now();
         const format = resolveUrlFormat(config.urlFormat, editor);
-        const url = buildUrl(s3Key, config.urlPrefix, format);
+        const url = buildUrl(s3Key, config.urlPrefix, format, md5);
         debugLog(`URL 构建: ${Date.now() - tUrl}ms, url=${url}`);
 
         // 步骤 6: 替换占位符为最终 URL
