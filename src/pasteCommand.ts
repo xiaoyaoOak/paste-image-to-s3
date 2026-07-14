@@ -83,14 +83,29 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         return;
       }
 
-      // 步骤 2: 读取剪贴板图片
+      // 步骤 2: 先检查剪贴板是否有文字（避免启动 PowerShell 浪费 250ms）
+      const tText = Date.now();
+      const clipText = await vscode.env.clipboard.readText();
+      debugLog(`读取剪贴板文字: ${Date.now() - tText}ms`);
+
+      if (clipText) {
+        // 剪贴板是文字 — 直接插入，不启动 PowerShell
+        await editor.edit(editBuilder => {
+          editBuilder.insert(editor.selection.active, clipText);
+        });
+        debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
+        return;
+      }
+
+      // 步骤 3: 剪贴板无文字 → 尝试读取图片
       const tClip = Date.now();
       const image = await readClipboardImage();
-      debugLog(`读取剪贴板: ${Date.now() - tClip}ms, ${image ? `${image.format} ${(image.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
+      debugLog(`读取剪贴板图片: ${Date.now() - tClip}ms, ${image ? `${image.format} ${(image.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
 
       if (!image) {
-        // 无图片 — 回退到默认粘贴
-        return vscode.commands.executeCommand('default:editor.action.clipboardPasteAction');
+        // 无图片也无文字 — 什么都不做
+        debugLog(`剪贴板为空, 总${Date.now() - tStart}ms`);
+        return;
       }
 
       // 检查图片大小 (50MB 限制)
