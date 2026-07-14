@@ -1,6 +1,7 @@
 // src/pasteCommand.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { getConfig, validateConfig } from './config';
 import { S3Uploader } from './s3Client';
 import { generatePath } from './pathGenerator';
@@ -53,6 +54,26 @@ function getContentType(format: string): string {
   return map[format] || 'application/octet-stream';
 }
 
+/** 支持上传的图片扩展名 */
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.svg']);
+
+/** 检测剪贴板文字是否为图片文件路径，若是则读取文件内容 */
+function tryReadImageFile(text: string): { buffer: Buffer; format: string } | null {
+  // 去引号、去首尾空白
+  const trimmed = text.replace(/^["']|["']$/g, '').trim();
+  // 只处理单行路径
+  if (trimmed.includes('\n') || trimmed.includes('\r')) { return null; }
+
+  const ext = path.extname(trimmed).toLowerCase();
+  if (!IMAGE_EXTS.has(ext)) { return null; }
+  if (!fs.existsSync(trimmed)) { return null; }
+
+  const buffer = fs.readFileSync(trimmed);
+  // 去掉 .svg 后缀：png/jpg/gif/webp/bmp/tiff → remove dot
+  const format = ext.slice(1); // "png"
+  return { buffer, format };
+}
+
 /** 注册粘贴命令拦截 */
 export function registerPasteCommand(context: vscode.ExtensionContext): vscode.Disposable {
 
@@ -88,24 +109,34 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
       const clipText = await vscode.env.clipboard.readText();
       debugLog(`读取剪贴板文字: ${Date.now() - tText}ms`);
 
+      // 尝试从剪贴板文字中提取图片文件路径
+      let image: { buffer: Buffer; format: string } | undefined;
+
       if (clipText) {
-        // 剪贴板是文字 — 直接插入，不启动 PowerShell
-        await editor.edit(editBuilder => {
-          editBuilder.insert(editor.selection.active, clipText);
-        });
-        debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
-        return;
-      }
+        const fileImage = tryReadImageFile(clipText);
+        if (fileImage) {
+          // 剪贴板是图片文件路径 → 读取文件内容上传
+          image = fileImage;
+          debugLog(`从文件路径读取图片: ${clipText}, ${(fileImage.buffer.length / 1024).toFixed(1)}KB`);
+        } else {
+          // 普通文字 → 直接粘贴
+          await editor.edit(editBuilder => {
+            editBuilder.insert(editor.selection.active, clipText);
+          });
+          debugLog(`文字粘贴完成: ${clipText.length} 字符, 总${Date.now() - tStart}ms`);
+          return;
+        }
+      } else {
+        // 步骤 3: 剪贴板无文字 → 尝试从剪贴板读取图片二进制（截图）
+        const tClip = Date.now();
+        const clipImage = await readClipboardImage();
+        debugLog(`读取剪贴板图片: ${Date.now() - tClip}ms, ${clipImage ? `${clipImage.format} ${(clipImage.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
 
-      // 步骤 3: 剪贴板无文字 → 尝试读取图片
-      const tClip = Date.now();
-      const image = await readClipboardImage();
-      debugLog(`读取剪贴板图片: ${Date.now() - tClip}ms, ${image ? `${image.format} ${(image.buffer.length / 1024).toFixed(1)}KB` : '无图片'}`);
-
-      if (!image) {
-        // 无图片也无文字 — 什么都不做
-        debugLog(`剪贴板为空, 总${Date.now() - tStart}ms`);
-        return;
+        if (!clipImage) {
+          debugLog(`剪贴板为空, 总${Date.now() - tStart}ms`);
+          return;
+        }
+        image = clipImage;
       }
 
       // 检查图片大小 (50MB 限制)
