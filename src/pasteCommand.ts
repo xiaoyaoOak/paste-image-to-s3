@@ -102,11 +102,9 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
       }
 
       // ─── 光标处插入加载占位符 ───
-      // Unicode 沙漏 ⌛ 或 ⏳, 也可用 📤⬆️☁️
       const cursorPos = editor.selection.active;
-      const isMarkdown = resolveUrlFormat(config.urlFormat, editor) === 'markdown';
-      const placeholderLabel = isMarkdown ? '![⌛]()' : '⌛';
-      const placeholderLen = placeholderLabel.length;
+      const placeholderLabel = '⌛';
+      const placeholderLen = 1; // 单字符，后续 Range 计算更精确
 
       const inserted = await editor.edit(editBuilder => {
         editBuilder.insert(cursorPos, placeholderLabel);
