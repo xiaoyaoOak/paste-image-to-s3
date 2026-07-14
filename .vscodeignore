@@ -16,3 +16,6 @@ vsc-extension-quickstart.md
 .superpowers/**
 docs/**
 CLAUDE.md
+pnpm-lock.yaml
+pnpm-workspace.yaml
+.claude/**
