@@ -96,21 +96,7 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
 
       const config = getConfig();
 
-      // 步骤 1: 先校验配置（剪贴板读取前，避免白跑 PowerShell）
-      const validation = validateConfig(config);
-      if (!validation.valid) {
-        const missingStr = validation.missing.join(', ');
-        const action = await vscode.window.showErrorMessage(
-          `S3 配置不完整，缺少: ${missingStr}。请前往设置页面配置。`,
-          '打开设置'
-        );
-        if (action === '打开设置') {
-          vscode.commands.executeCommand('workbench.action.openSettings', 'pasteImageToS3');
-        }
-        return;
-      }
-
-      // 步骤 2: 读取剪贴板 — 文字 → 图片二进制 → CF_HDROP 依次尝试
+      // 读取剪贴板，仅在识别到"可直接上传的图片"时设置 image；其余情况一律交给原生粘贴
       let image: { buffer: Buffer; format: string } | undefined;
 
       // 2a: 先读文字（1ms，最快路径）
@@ -161,8 +147,23 @@ export function registerPasteCommand(context: vscode.ExtensionContext): vscode.D
         }
       }
 
+      // 无图片 → 走 VS Code 原生粘贴（默认行为，零额外处理）
       if (!image) {
-        debugLog(`剪贴板为空, 总${Date.now() - tStart}ms`);
+        debugLog(`无图片 → 派发原生粘贴, 总${Date.now() - tStart}ms`);
+        return vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+      }
+
+      // 有图片 → 校验配置后上传（配置缺失仅在此处提示，绝不影响非图片粘贴）
+      const validation = validateConfig(config);
+      if (!validation.valid) {
+        const missingStr = validation.missing.join(', ');
+        const action = await vscode.window.showErrorMessage(
+          `S3 配置不完整，缺少: ${missingStr}。请前往设置页面配置。`,
+          '打开设置'
+        );
+        if (action === '打开设置') {
+          vscode.commands.executeCommand('workbench.action.openSettings', 'pasteImageToS3');
+        }
         return;
       }
 
