@@ -23,7 +23,7 @@ function logError(detail: string): void {
 }
 
 // ─── 调试日志 ───────────────────────────────────────────
-const DEBUG_ENABLED = true; // 发布时可改为 false
+const DEBUG_ENABLED = false;
 
 function debugLog(msg: string): void {
   if (!DEBUG_ENABLED) { return; }

@@ -6,10 +6,9 @@ import * as vscode from 'vscode';
 // import * as myExtension from '../../extension';
 
 suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
-
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+	test('扩展应正常激活', () => {
+		const ext = vscode.extensions.all.find(e => e.id.includes('paste-image-to-s3'));
+		assert.ok(ext, '扩展未找到');
+		assert.strictEqual(ext?.isActive, true);
 	});
 });
